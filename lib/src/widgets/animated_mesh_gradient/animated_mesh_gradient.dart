@@ -48,33 +48,17 @@ class AnimatedMeshGradient extends StatefulWidget {
   State<AnimatedMeshGradient> createState() => _AnimatedMeshGradientState();
 }
 
-class _AnimatedMeshGradientState extends State<AnimatedMeshGradient> {
+class _AnimatedMeshGradientState extends State<AnimatedMeshGradient>
+    with TickerProviderStateMixin {
   /// Path to the shader asset used for the gradient animation.
   static const String _shaderAssetPath =
       'packages/mesh_gradient/shaders/animated_mesh_gradient.frag';
 
-  Ticker? _ticker;
-
   /// The current time value used to control the animation phase.
   late double _delta = widget.seed ?? 0;
 
-  /// Recursively updates the animation time and triggers a repaint.
   ///
-  /// This method is called periodically and ensures the animation continues
-  /// to run. It checks if the widget is still mounted and if the controller
-  /// (if present) allows for the animation to proceed.
-  void _tickerCallback(Duration elapsed) {
-    if (!mounted ||
-        (widget.controller != null
-            ? !widget.controller!.isAnimating.value
-            : false)) {
-      return;
-    }
-
-    setState(() {
-      _delta += 0.01;
-    });
-  }
+  late AnimatedMeshGradientController _controller;
 
   @override
   void initState() {
@@ -99,38 +83,33 @@ class _AnimatedMeshGradientState extends State<AnimatedMeshGradient> {
     if (widget.seed != null) {
       return;
     }
+    _updateController();
+    _controller.start();
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      // Define the ticker because we are certain it will be used next
-      _ticker = Ticker(_tickerCallback);
+  void _updateController([AnimatedMeshGradientController? old]) {
+    assert(
+      (widget.controller == null && old == null) || widget.controller != old,
+    );
+    final isAnimating = old?.isAnimating ?? false;
+    old?.dispose();
+    _controller =
+        widget.controller ?? AnimatedMeshGradientController(vsync: this);
+    _controller.addListener(_onAnimationChanged);
+    if (isAnimating) _controller.start();
+  }
 
-      // Start the animation to account for isAnimating already being true at init
-      if (widget.controller == null || widget.controller!.isAnimating.value) {
-        _ticker!.start();
-      }
-
-      // Make sure there is no listener added when controller is null
-      if (widget.controller == null) {
-        return;
-      }
-
-      // Register a listener callback for controller.isAnimating changes
-      widget.controller!.isAnimating.addListener(() {
-        if (widget.controller!.isAnimating.value && !_ticker!.isActive) {
-          _ticker!.start();
-          return;
-        }
-
-        if (!widget.controller!.isAnimating.value && _ticker!.isActive) {
-          _ticker!.stop();
-        }
-      });
-    });
+  @override
+  void didUpdateWidget(covariant AnimatedMeshGradient oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      _updateController(oldWidget.controller);
+    }
   }
 
   @override
   void dispose() {
-    _ticker?.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -153,5 +132,14 @@ class _AnimatedMeshGradientState extends State<AnimatedMeshGradient> {
       },
       child: widget.child,
     );
+  }
+
+  /// Recursively updates the animation time and triggers a repaint.
+  ///
+  /// This method is called periodically and ensures the animation continues
+  /// to run. It checks if the widget is still mounted and if the controller
+  /// (if present) allows for the animation to proceed.
+  void _onAnimationChanged() {
+    setState(() => _delta += 0.01);
   }
 }
